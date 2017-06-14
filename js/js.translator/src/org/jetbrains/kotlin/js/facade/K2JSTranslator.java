@@ -16,6 +16,7 @@
 
 package org.jetbrains.kotlin.js.facade;
 
+import com.intellij.openapi.vfs.VfsUtilCore;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptor;
@@ -28,6 +29,7 @@ import org.jetbrains.kotlin.js.config.JSConfigurationKeys;
 import org.jetbrains.kotlin.js.config.JsConfig;
 import org.jetbrains.kotlin.js.coroutine.CoroutineTransformer;
 import org.jetbrains.kotlin.js.facade.exceptions.TranslationException;
+import org.jetbrains.kotlin.js.incremental.JsIncrementalService;
 import org.jetbrains.kotlin.js.inline.JsInliner;
 import org.jetbrains.kotlin.js.inline.clean.LabeledBlockToDoWhileTransformation;
 import org.jetbrains.kotlin.js.inline.clean.RemoveUnusedImportsKt;
@@ -45,6 +47,7 @@ import org.jetbrains.kotlin.serialization.js.KotlinJavascriptSerializationUtil;
 import org.jetbrains.kotlin.serialization.js.ast.JsAstSerializer;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -60,8 +63,12 @@ public final class K2JSTranslator {
     @NotNull
     private final JsConfig config;
 
+    @Nullable
+    private final JsIncrementalService incrementalService;
+
     public K2JSTranslator(@NotNull JsConfig config) {
         this.config = config;
+        this.incrementalService = config.getConfiguration().get(JSConfigurationKeys.INCREMENTAL_SERVICE);
     }
 
     @NotNull
@@ -139,34 +146,27 @@ public final class K2JSTranslator {
         ExpandIsCallsKt.expandIsCalls(newFragments);
         ProgressIndicatorAndCompilationCanceledStatus.checkCanceled();
 
-        Map<KtFile, FileTranslationResult> fileMap = new HashMap<KtFile, FileTranslationResult>();
-        JsAstSerializer serializer = new JsAstSerializer();
-        byte[] metadataHeader = null;
-        boolean serializeFragments = config.getConfiguration().get(JSConfigurationKeys.SERIALIZE_FRAGMENTS, false);
-        for (KtFile file : files) {
-            List<DeclarationDescriptor> scope = translationResult.getFileMemberScopes().get(file);
-            byte[] binaryAst = null;
-            byte[] binaryMetadata = null;
-            if (serializeFragments) {
-                JsProgramFragment fragment = translationResult.getFragmentMap().get(file);
-                if (fragment != null) {
-                    ByteArrayOutputStream output = new ByteArrayOutputStream();
-                    serializer.serialize(fragment, output);
-                    binaryAst = output.toByteArray();
-                }
+        if (incrementalService != null) {
+            JsAstSerializer serializer = new JsAstSerializer();
+            KotlinJavascriptSerializationUtil serializationUtil = KotlinJavascriptSerializationUtil.INSTANCE;
 
-                if (scope != null) {
-                    ProtoBuf.PackageFragment part = KotlinJavascriptSerializationUtil.INSTANCE.serializeDescriptors(
-                            bindingTrace.getBindingContext(), moduleDescriptor, scope, file.getPackageFqName());
-                    binaryMetadata = part.toByteArray();
-                }
+            for (KtFile file : files) {
+                JsProgramFragment fragment = translationResult.getFragmentMap().get(file);
+                assert fragment != null : "Could not find AST for file: " + file;
+                ByteArrayOutputStream output = new ByteArrayOutputStream();
+                serializer.serialize(fragment, output);
+                byte[] binaryAst = output.toByteArray();
+
+                List<DeclarationDescriptor> scope = translationResult.getFileMemberScopes().get(file);
+                assert scope != null : "Could not find descriptors for file: " + file;
+                ProtoBuf.PackageFragment packagePart = serializationUtil.serializeDescriptors(
+                        bindingTrace.getBindingContext(), moduleDescriptor, scope, file.getPackageFqName());
+
+                File ioFile = VfsUtilCore.virtualToIoFile(file.getVirtualFile());
+                incrementalService.processPackagePart(ioFile, packagePart, binaryAst);
             }
 
-            fileMap.put(file, new FileTranslationResult(file, binaryMetadata, binaryAst));
-        }
-
-        if (serializeFragments) {
-            metadataHeader = KotlinJavascriptSerializationUtil.INSTANCE.serializeHeader(null).toByteArray();
+            incrementalService.processHeader(serializationUtil.serializeHeader(null));
         }
 
         ResolveTemporaryNamesKt.resolveTemporaryNames(translationResult.getProgram());
@@ -179,6 +179,6 @@ public final class K2JSTranslator {
         }
 
         return new TranslationResult.Success(config, files, translationResult.getProgram(), diagnostics, importedModules,
-                                             moduleDescriptor, bindingTrace.getBindingContext(), metadataHeader, fileMap);
+                                             moduleDescriptor, bindingTrace.getBindingContext());
     }
 }

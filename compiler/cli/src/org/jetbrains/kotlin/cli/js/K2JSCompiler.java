@@ -199,7 +199,7 @@ public class K2JSCompiler extends CLICompiler<K2JSCompilerArguments> {
 
         try {
             //noinspection unchecked
-            translationResult = translate(sourcesFiles, jsAnalysisResult, mainCallParameters, config);
+            translationResult = translate(sourcesFiles, jsAnalysisResult, mainCallParameters, config, services);
         }
         catch (Exception e) {
             throw ExceptionUtilsKt.rethrow(e);

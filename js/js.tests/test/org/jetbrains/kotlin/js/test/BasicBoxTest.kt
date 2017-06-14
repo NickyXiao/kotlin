@@ -426,7 +426,7 @@ abstract class BasicBoxTest(
 
         val hasFilesToRecompile = module.hasFilesToRecompile
         configuration.put(JSConfigurationKeys.META_INFO, multiModule)
-        configuration.put(JSConfigurationKeys.SERIALIZE_FRAGMENTS, hasFilesToRecompile)
+        configuration.put(JSConfigurationKeys.INCREMENTAL_SERVICE, hasFilesToRecompile)
         configuration.put(JSConfigurationKeys.SOURCE_MAP, hasFilesToRecompile)
 
         if (additionalMetadata != null) {

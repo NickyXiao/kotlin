@@ -327,7 +327,7 @@ class IncrementalJsCompilerRunner(
             var translatedMetadataHeader: ByteArray? = null
 
             override fun createJsEnvironment(configuration: CompilerConfiguration, rootDisposable: Disposable): KotlinCoreEnvironment {
-                configuration.put(JSConfigurationKeys.SERIALIZE_FRAGMENTS, true)
+                configuration.put(JSConfigurationKeys.INCREMENTAL_SERVICE, true)
                 fallbackMetadata?.let { configuration.put(JSConfigurationKeys.FALLBACK_METADATA, it) }
                 return super.createJsEnvironment(configuration, rootDisposable)
             }
