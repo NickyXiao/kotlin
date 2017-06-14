@@ -22,18 +22,29 @@ import com.intellij.psi.PsiFile;
 import com.intellij.util.PairConsumer;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.js.backend.ast.JsLocation;
+import org.jetbrains.kotlin.js.backend.ast.JsLocationWithSource;
 import org.jetbrains.kotlin.js.sourceMap.SourceFilePathResolver;
 import org.jetbrains.kotlin.js.sourceMap.SourceMapBuilder;
 
-import java.io.File;
-import java.io.IOException;
+import java.io.*;
+import java.nio.charset.Charset;
+import java.util.function.Supplier;
 
 public class SourceMapBuilderConsumer implements PairConsumer<SourceMapBuilder, Object> {
     @NotNull
     private final SourceFilePathResolver pathResolver;
 
-    public SourceMapBuilderConsumer(@NotNull SourceFilePathResolver pathResolver) {
+    private final boolean provideCurrentModuleContent;
+
+    private final boolean provideExternalModuleContent;
+
+    public SourceMapBuilderConsumer(
+            @NotNull SourceFilePathResolver pathResolver,
+            boolean provideCurrentModuleContent, boolean provideExternalModuleContent
+    ) {
         this.pathResolver = pathResolver;
+        this.provideCurrentModuleContent = provideCurrentModuleContent;
+        this.provideExternalModuleContent = provideExternalModuleContent;
     }
 
     @Override
@@ -49,7 +60,21 @@ public class SourceMapBuilderConsumer implements PairConsumer<SourceMapBuilder, 
 
             File file = new File(psiFile.getViewProvider().getVirtualFile().getPath());
             try {
-                builder.addMapping(pathResolver.getPathRelativeToSourceRoots(file), line, column);
+                Supplier<Reader> contentSupplier;
+                if (provideCurrentModuleContent) {
+                    contentSupplier = () -> {
+                        try {
+                            return new InputStreamReader(new FileInputStream(file), Charset.forName("UTF-8"));
+                        }
+                        catch (IOException e) {
+                            return null;
+                        }
+                    };
+                }
+                else {
+                    contentSupplier = () -> null;
+                }
+                builder.addMapping(pathResolver.getPathRelativeToSourceRoots(file), null, contentSupplier, line, column);
             }
             catch (IOException e) {
                 throw new RuntimeException("IO error occurred generating source maps", e);
@@ -57,7 +82,14 @@ public class SourceMapBuilderConsumer implements PairConsumer<SourceMapBuilder, 
         }
         else if (sourceInfo instanceof JsLocation) {
             JsLocation location = (JsLocation) sourceInfo;
-            builder.addMapping(location.getFile(), location.getStartLine(), location.getStartChar());
+            builder.addMapping(location.getFile(), null, () -> null, location.getStartLine(), location.getStartChar());
+        }
+        else if (sourceInfo instanceof JsLocationWithSource) {
+            JsLocationWithSource locationWithSource = (JsLocationWithSource) sourceInfo;
+            JsLocation location = locationWithSource.getLocation();
+            Supplier<Reader> contentSupplier = provideExternalModuleContent ? locationWithSource.getSourceProvider()::invoke : () -> null;
+            builder.addMapping(location.getFile(), locationWithSource.getIdentityObject(), contentSupplier,
+                               location.getStartLine(), location.getStartChar());
         }
     }
 }

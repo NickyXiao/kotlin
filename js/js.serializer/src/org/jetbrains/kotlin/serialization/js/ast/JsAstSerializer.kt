@@ -590,6 +590,7 @@ class JsAstSerializer(private val pathResolver: (File) -> String) {
         val source = node.source
         return when (source) {
             is JsLocation -> source
+            is JsLocationWithSource -> source.location
             is PsiElement -> extractLocation(source)
             else -> null
         }

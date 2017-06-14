@@ -38,6 +38,7 @@ import org.json.JSONObject
 import org.json.JSONTokener
 import java.io.IOException
 import java.io.Reader
+import java.io.StringReader
 
 object SourceMapParser {
     @Throws(IOException::class)
@@ -72,6 +73,23 @@ object SourceMapParser {
             emptyList()
         }
 
+        val sourcesContent = if (jsonObject.has("sourcesContent")) {
+            val sourcesContentProperty = jsonObject.get("sourcesContent") as? JSONArray ?:
+                                         return SourceMapError("'sourcesContent' property is not of array type")
+            sourcesContentProperty.map {
+                when (it) {
+                    is String -> it
+                    null -> null
+                    else -> return SourceMapError("'sources' array must contain strings")
+                }
+            }
+        }
+        else {
+            null
+        }
+
+        val sourcePathToContent = if (sourcesContent != null) sources.zip(sourcesContent).associate { it } else emptyMap()
+
         if (!jsonObject.has("mappings")) return SourceMapError("'mappings' property not found")
         val mappings = jsonObject.get("mappings") as? String ?: return SourceMapError("'mappings' property is not of string type")
 
@@ -80,7 +98,7 @@ object SourceMapParser {
         var sourceColumn = 0
         var sourceIndex = 0
         val stream = MappingStream(mappings)
-        val sourceMap = SourceMap()
+        val sourceMap = SourceMap { sourcePathToContent[it]?.let { StringReader(it) } }
         var currentGroup = SourceMapGroup().also { sourceMap.groups += it }
 
         while (!stream.isEof) {

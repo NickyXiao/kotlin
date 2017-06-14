@@ -49,7 +49,14 @@ interface KotlinJsOptions  : org.jetbrains.kotlin.gradle.dsl.KotlinCommonOptions
      var sourceMap: kotlin.Boolean
 
     /**
-     * Prefix to add to paths in source map
+     * Embed source files into source map
+     * Possible values: never, always, inlining
+     * Default value: "inlining"
+     */
+     var sourceMapEmbedSources: kotlin.String
+
+    /**
+     * Prefix for paths in a source map
      * Default value: null
      */
      var sourceMapPrefix: kotlin.String?

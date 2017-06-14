@@ -42,6 +42,9 @@ class LineCollector : RecursiveJsVisitor() {
             is JsLocation -> {
                 source.startLine
             }
+            is JsLocationWithSource -> {
+                source.location.startLine
+            }
             else -> null
         }
 
