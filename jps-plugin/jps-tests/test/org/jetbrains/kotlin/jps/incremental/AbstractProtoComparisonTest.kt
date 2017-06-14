@@ -22,6 +22,8 @@ import com.intellij.util.SmartList
 import org.jetbrains.kotlin.incremental.LocalFileKotlinClass
 import org.jetbrains.kotlin.incremental.difference
 import org.jetbrains.kotlin.incremental.storage.ProtoMapValue
+import org.jetbrains.kotlin.js.config.JsConfig
+import org.jetbrains.kotlin.js.facade.K2JSTranslator
 import org.jetbrains.kotlin.load.kotlin.KotlinJvmBinaryClass
 import org.jetbrains.kotlin.load.kotlin.header.KotlinClassHeader
 import org.jetbrains.kotlin.serialization.jvm.BitEncoding
@@ -33,8 +35,10 @@ import java.io.File
 abstract class AbstractProtoComparisonTest : UsefulTestCase() {
     fun doTest(testDataPath: String) {
         val testDir = KotlinTestUtils.tmpDir("testDirectory")
-
         val oldClassFiles = compileFileAndGetClasses(testDataPath, testDir, "old")
+        val newClassFiles = compileFileAndGetClasses(testDataPath, testDir, "new")
+        val c = 0
+        /*val oldClassFiles = compileFileAndGetClasses(testDataPath, testDir, "old")
         val newClassFiles = compileFileAndGetClasses(testDataPath, testDir, "new")
 
         val oldClassMap = oldClassFiles.associateBy { it.name }
@@ -62,20 +66,20 @@ abstract class AbstractProtoComparisonTest : UsefulTestCase() {
             p.printDifference(oldClassMap[name]!!, newClassMap[name]!!)
         }
 
-        KotlinTestUtils.assertEqualsToFile(File(testDataPath + File.separator + "result.out"), sb.toString())
+        KotlinTestUtils.assertEqualsToFile(File(testDataPath + File.separator + "result.out"), sb.toString())*/
     }
 
-    private fun compileFileAndGetClasses(testPath: String, testDir: File, prefix: String): List<File> {
+    private fun compileFileAndGetClasses(testPath: String, testDir: File, prefix: String): List<Any> {
         val files = File(testPath).listFiles { it -> it.name.startsWith(prefix) }!!
         val sourcesDirectory = testDir.createSubDirectory("sources")
-        val classesDirectory = testDir.createSubDirectory("$prefix.src")
+        val classesDirectory = testDir.createSubDirectory("$prefix.out")
 
         files.forEach { file ->
             FileUtil.copy(file, File(sourcesDirectory, file.name.replaceFirst(prefix, "main")))
         }
-        MockLibraryUtil.compileKotlin(sourcesDirectory.path, classesDirectory)
+        K2JSTranslator(JsConfig())
 
-        return File(classesDirectory, "test").listFiles() { it -> it.name.endsWith(".class") }?.sortedBy { it.name }!!
+        return File(classesDirectory, "test").listFiles { it -> it.name.endsWith(".class") }?.sortedBy { it.name }!!
     }
 
     private fun Printer.printDifference(oldClassFile: File, newClassFile: File) {
